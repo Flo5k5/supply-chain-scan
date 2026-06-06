@@ -1,0 +1,10 @@
+{
+  "name": "supply-chain-scan",
+  "version": "0.1.0",
+  "description": "Morning supply-chain safety scan for npm / PyPI / Docker projects — known-malicious packages, CVEs, freshly-published deps, and release-cooldown / digest pinning. Zero-dependency, cross-platform.",
+  "author": { "name": "Flo5k5" },
+  "homepage": "https://github.com/Flo5k5/supply-chain-scan",
+  "repository": "https://github.com/Flo5k5/supply-chain-scan",
+  "license": "MIT",
+  "keywords": ["supply-chain", "security", "npm", "pypi", "docker", "osv-scanner", "malware", "cve"]
+}

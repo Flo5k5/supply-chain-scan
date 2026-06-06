@@ -1,0 +1,13 @@
+{
+  "name": "flo5k5-tools",
+  "owner": { "name": "Flo5k5" },
+  "description": "Claude Code plugins by Flo5k5.",
+  "plugins": [
+    {
+      "name": "supply-chain-scan",
+      "source": ".",
+      "description": "Morning supply-chain safety scan for npm / PyPI / Docker projects.",
+      "version": "0.1.0"
+    }
+  ]
+}

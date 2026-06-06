@@ -1,0 +1,53 @@
+{
+  "name": "supply-chain-scan",
+  "version": "0.1.0",
+  "description": "Morning supply-chain safety scan for npm, PyPI and Docker projects — known-malicious packages + CVEs + freshly-published deps + release-cooldown/digest pinning. Zero dependencies, cross-platform, one command.",
+  "type": "module",
+  "bin": {
+    "supply-chain-scan": "bin/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "skills",
+    ".claude-plugin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/cli.js",
+    "lint:plugin": "claude plugin validate --strict ."
+  },
+  "keywords": [
+    "supply-chain",
+    "security",
+    "npm",
+    "pypi",
+    "docker",
+    "osv-scanner",
+    "malware",
+    "cve",
+    "audit",
+    "dependencies",
+    "cli",
+    "zero-dependencies",
+    "claude-code",
+    "claude-code-plugin"
+  ],
+  "license": "MIT",
+  "author": "Flo5k5",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Flo5k5/supply-chain-scan.git"
+  },
+  "homepage": "https://github.com/Flo5k5/supply-chain-scan#readme",
+  "bugs": {
+    "url": "https://github.com/Flo5k5/supply-chain-scan/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
