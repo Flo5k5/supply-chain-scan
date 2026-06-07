@@ -25,12 +25,24 @@ adoption) and malicious/typosquatted Docker images all exploit the same blind sp
 
 | Threat | Defense in this tool |
 |--------|----------------------|
-| Known-malicious package (npm/PyPI) | **osv-scanner** + the OSV `MAL-` feed |
+| Known-malicious package (npm/PyPI/Go/Rust) | **osv-scanner** + the OSV `MAL-` feed |
 | Known CVE | osv-scanner + the package manager's `audit` |
 | **Zero-hour** malicious release (not yet reported) | **freshness heuristic** (flag deps published < N days ago) + the **release-cooldown** config check |
 | Mutable / hijackable Docker base image | **digest-pinning** check (`@sha256:`) + optional image CVE scan |
+| **Install-time code execution** outside `package.json` scripts (the *phantom gyp* trick — Shai-Hulud/Miasma, 2026) | **build-manifest scan**: flags shell-command substitution in `binding.gyp`/`Makefile`/`setup.py` |
+| **Obfuscated worm payload** dropped as a root JS file (e.g. `bun_environment.js`) | **undeclared-large-JS check**: oversized root `.js/.ts` that isn't a declared entry point |
+| **Repo config that auto-runs when you open the folder** in an AI coding agent (the *Miasma reaches Azure* wave, 2026) | **agent/IDE-config scan**: flags on-open execution in `.devcontainer`, `.vscode/tasks.json`, `.claude` hooks, `.mcp.json` |
 
-No single open-source CLI combined these into a one-command morning verdict across all three ecosystems — so here it is.
+No single open-source CLI combined these into a one-command morning verdict across all these ecosystems — so here it is.
+
+### The AI-agent config trigger
+
+The June 2026 Miasma wave (which had GitHub disable 73 Microsoft Azure repos) did **not** require installing a
+poisoned package. It planted repository config files that execute the moment a developer opens the folder in
+**Claude Code, Cursor, Gemini CLI or VS Code** — a `devcontainer.json` `postCreateCommand`, a VS Code task set
+to `runOn: folderOpen`, a Claude Code hook, or an `.mcp.json` server command. The scan flags exactly those
+auto-on-open execution points (and nothing as noisy as an ordinary `settings.json`), so you see them before
+your editor runs them.
 
 ---
 
@@ -71,6 +83,8 @@ npm install -g supply-chain-scan         # or install globally
 supply-chain-scan [project-dir]      # defaults to the current directory
 
   --fresh-days <N>   flag deps published less than N days ago   (default 3)
+  --max-js-mb <N>    flag undeclared root JS/TS files larger than N MB (default 0.5)
+  --no-agent-configs skip the agent/IDE auto-exec-on-open check (on by default)
   --images           also pull & scan Docker base images for CVEs (slow, opt-in)
   --json             machine-readable output
   --no-color         disable ANSI colors
@@ -134,7 +148,7 @@ and OSV.dev (via osv-scanner) for advisories. Nothing about your project is uplo
 ## Roadmap
 
 - Auto-download a pinned, checksum-verified osv-scanner binary (`--install-scanner`).
-- Go (`go.sum`) and Rust (`Cargo.lock`) — osv-scanner already supports them.
+- ~~Go (`go.sum`) and Rust (`Cargo.lock`)~~ — shipped in 0.2.0 (osv-scanner parses them).
 - A GitHub Action / pre-commit recipe for teams that want this in CI too.
 
 ## License

@@ -6,8 +6,8 @@
     {
       "name": "supply-chain-scan",
       "source": ".",
-      "description": "Morning supply-chain safety scan for npm / PyPI / Docker projects.",
-      "version": "0.1.0"
+      "description": "Morning supply-chain safety scan for npm / PyPI / Docker / Go / Rust — incl. build-manifest & AI-agent-config auto-exec checks (Shai-Hulud/Miasma vectors).",
+      "version": "0.2.0"
     }
   ]
 }

