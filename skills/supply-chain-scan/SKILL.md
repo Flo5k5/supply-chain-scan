@@ -1,6 +1,6 @@
 ---
 name: supply-chain-scan
-description: Run a morning supply-chain safety scan on the JS/TS, Python, Docker, Go or Rust project the user is about to work on. Checks the lockfiles for known-malicious packages (OSV MAL- feed) and CVEs, flags freshly-published dependencies (zero-hour heuristic), runs the package manager's CVE audit, checks the per-project release-cooldown / Docker base-image digest pinning, scans build manifests for install-time code execution (the phantom-gyp trick), flags oversized undeclared root JS payloads, and flags repo/agent configs that auto-execute when the folder is opened in an AI coding agent (the Miasma vector). Account-free, no per-project CI. Use at the start of a dev day, when opening or cloning a repo, or right after pulling/updating dependencies or a Dockerfile base image.
+description: Run a morning supply-chain safety scan on the JS/TS, Python, Docker, Go, Rust or NuGet project the user is about to work on. Monorepo-aware (recursively finds lockfiles and Dockerfiles in nested packages). Checks the lockfiles for known-malicious packages (OSV MAL- feed) and CVEs, flags freshly-published dependencies (zero-hour heuristic), runs the package manager's CVE audit, checks the per-project release-cooldown / Docker base-image digest pinning, scans build manifests for install-time code execution (the phantom-gyp trick), flags oversized undeclared root JS payloads, and flags repo/agent configs that auto-execute when the folder is opened in an AI coding agent (the Miasma vector). Account-free, no per-project CI. Use at the start of a dev day, when opening or cloning a repo, or right after pulling/updating dependencies or a Dockerfile base image.
 allowed-tools: Bash
 ---
 
@@ -24,9 +24,11 @@ when the folder is opened in Claude Code / Cursor / Gemini CLI / VS Code.
    # or, if installed from npm:
    npx supply-chain-scan <project-dir>
    ```
-   Useful flags: `--fresh-days N` (default 3), `--max-js-mb N` (root-JS size threshold, default 0.5),
-   `--no-agent-configs` (skip the auto-exec-on-open check), `--images` (also pull+scan Docker base images —
-   slow, opt-in), `--json` (machine-readable).
+   The scan is **recursive by default**: it finds lockfiles and Dockerfiles in nested packages (monorepos),
+   skipping `node_modules`/build/vendored dirs. Useful flags: `--no-recursive` / `--depth N` (bound the walk —
+   handy on huge workspaces where osv-scanner gets slow), `--fresh-days N` (default 3), `--max-js-mb N` (root-JS
+   size threshold, default 0.5), `--no-agent-configs` (skip the auto-exec-on-open check), `--images` (also
+   pull+scan Docker base images — slow, opt-in), `--json` (machine-readable).
 3. If the output says `osv-scanner not installed`, it's a one-time global install (the line shows the exact
    command for the user's OS: `brew install osv-scanner` / `winget install Google.OSVScanner`). Offer to run
    it, then re-run the scan.

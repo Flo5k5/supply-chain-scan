@@ -22,12 +22,18 @@ USAGE
 OPTIONS
   --fresh-days <N>   flag deps published less than N days ago (default 3)
   --max-js-mb <N>    flag undeclared root JS/TS files larger than N MB (default 0.5)
+  --no-recursive     scan only the root dir, not nested packages (recursive by default)
+  --depth <N>        max directory depth for the recursive scan (default 5)
   --no-agent-configs skip the agent/IDE auto-exec-on-open check (on by default)
   --images           also pull & scan Docker base images for CVEs (slow, opt-in)
   --json             machine-readable output
   --no-color         disable ANSI colors
   -h, --help         show this help
   -v, --version      show version
+
+Recursive scan finds lockfiles in nested packages / monorepos (skipping node_modules,
+build output and vendored dirs). On a very large workspace it can be slow — use
+--no-recursive or --depth to bound it.
 
 EXIT CODES
   0  clean       1  review (findings)       2  setup (osv-scanner not installed)
@@ -44,6 +50,8 @@ let dir = null;
 let freshDays = 3;
 let maxJsMb = 0.5;
 let agentConfigs = true;
+let recursive = true;
+let maxDepth = 5;
 let images = false;
 let json = false;
 for (let i = 0; i < argv.length; i++) {
@@ -55,6 +63,10 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--no-color') process.env.NO_COLOR = '1';
   else if (a === '--no-agent-configs') agentConfigs = false;
   else if (a === '--agent-configs') agentConfigs = true;
+  else if (a === '--no-recursive') recursive = false;
+  else if (a === '--recursive') recursive = true;
+  else if (a === '--depth') maxDepth = parseInt(argv[++i], 10) || 5;
+  else if (a.startsWith('--depth=')) maxDepth = parseInt(a.slice(8), 10) || 5;
   else if (a === '--fresh-days') freshDays = parseInt(argv[++i], 10) || 3;
   else if (a.startsWith('--fresh-days=')) freshDays = parseInt(a.slice(13), 10) || 3;
   else if (a === '--max-js-mb') maxJsMb = parseFloat(argv[++i]) || 0.5;
@@ -69,7 +81,7 @@ if (!existsSync(dir) || !statSync(dir).isDirectory()) {
 }
 
 const name = basename(dir);
-const d = detect(dir);
+const d = detect(dir, { recursive, maxDepth });
 
 if (d.empty) {
   if (json) process.stdout.write(JSON.stringify({ project: name, dir, ecosystems: [], results: [], code: 0 }) + '\n');
@@ -103,6 +115,7 @@ const ecosystems = [
   d.python && `PyPI${d.python.usesUv ? '(uv)' : ''}`,
   d.docker && `Docker(${d.docker.baseImages.length} img)`,
   d.goRust && `Go/Rust(${d.goRust.locks.length})`,
+  d.nestedLocks > 0 && `+${d.nestedLocks} nested lock(s)`,
   d.buildManifests.length && `build(${d.buildManifests.length})`,
   d.agentConfigs.length && `agent-cfg(${d.agentConfigs.length})`,
 ].filter(Boolean);

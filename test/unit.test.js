@@ -181,6 +181,51 @@ test('agentConfigScan: JSONC with comments + folderOpen task is flagged', () => 
   cleanup(dir);
 });
 
+test('detect: recursive finds nested lockfiles and skips node_modules', () => {
+  const dir = fixture({
+    'apps/web/package-lock.json': '{}',
+    'services/api/requirements.txt': 'requests==2.31.0',
+    'node_modules/evil/package-lock.json': '{}', // vendored → must be skipped
+  });
+  const d = detect(dir);
+  assert.ok(d.lockfiles.includes('apps/web/package-lock.json'));
+  assert.ok(d.lockfiles.includes('services/api/requirements.txt'));
+  assert.ok(!d.lockfiles.some((l) => l.includes('node_modules')), 'node_modules excluded');
+  assert.equal(d.nestedLocks, 2);
+  assert.equal(d.empty, false);
+  cleanup(dir);
+});
+
+test('detect: --no-recursive stays at root only', () => {
+  const dir = fixture({ 'package-lock.json': '{}', 'apps/web/package-lock.json': '{}' });
+  const d = detect(dir, { recursive: false });
+  assert.deepEqual(d.lockfiles, ['package-lock.json']);
+  assert.equal(d.nestedLocks, 0);
+  cleanup(dir);
+});
+
+test('detect: NuGet packages.lock.json is picked up recursively', () => {
+  const dir = fixture({ 'src/Api/packages.lock.json': '{"version":1}' });
+  assert.ok(detect(dir).lockfiles.includes('src/Api/packages.lock.json'));
+  cleanup(dir);
+});
+
+test('detect: nested Dockerfiles are found recursively', () => {
+  const dir = fixture({ 'services/api/Dockerfile': 'FROM node:22-alpine\n' });
+  const d = detect(dir);
+  assert.ok(d.docker);
+  assert.equal(d.docker.baseImages.length, 1);
+  assert.equal(d.docker.baseImages[0].file, 'services/api/Dockerfile');
+  cleanup(dir);
+});
+
+test('detect: maxDepth bounds the recursive descent', () => {
+  const dir = fixture({ 'a/b/c/d/e/package-lock.json': '{}' });
+  assert.equal(detect(dir, { maxDepth: 2 }).lockfiles.length, 0);
+  assert.ok(detect(dir, { maxDepth: 6 }).lockfiles.includes('a/b/c/d/e/package-lock.json'));
+  cleanup(dir);
+});
+
 test('ageInDays: whole-day delta', () => {
   const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000 - 1000);
   assert.equal(ageInDays(fiveDaysAgo), 5);

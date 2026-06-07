@@ -84,6 +84,8 @@ supply-chain-scan [project-dir]      # defaults to the current directory
 
   --fresh-days <N>   flag deps published less than N days ago   (default 3)
   --max-js-mb <N>    flag undeclared root JS/TS files larger than N MB (default 0.5)
+  --no-recursive     scan only the root dir, not nested packages (recursive by default)
+  --depth <N>        max directory depth for the recursive scan (default 5)
   --no-agent-configs skip the agent/IDE auto-exec-on-open check (on by default)
   --images           also pull & scan Docker base images for CVEs (slow, opt-in)
   --json             machine-readable output
@@ -92,6 +94,15 @@ supply-chain-scan [project-dir]      # defaults to the current directory
 ```
 
 Exit codes (scriptable): **`0`** clean · **`1`** review (findings) · **`2`** setup (osv-scanner not installed).
+
+### Monorepos (recursive by default)
+
+The scan walks the workspace and picks up lockfiles and Dockerfiles in **nested packages** —
+`package-lock.json`/`pnpm-lock.yaml`/`yarn.lock`, `requirements.txt`/`uv.lock`/`poetry.lock`,
+`go.sum`, `Cargo.lock` and NuGet's `packages.lock.json` — skipping `node_modules`, build output and
+vendored dirs. Point it at the repo root and every package gets scanned in one pass (the header shows
+`+N nested lock(s)`). On a very large workspace this can be slow (osv-scanner time grows with the
+dependency tree) — bound it with `--depth <N>` or fall back to `--no-recursive`.
 
 ### Example
 

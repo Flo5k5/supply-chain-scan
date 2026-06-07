@@ -1,7 +1,7 @@
 {
   "name": "supply-chain-scan",
-  "version": "0.2.0",
-  "description": "Morning supply-chain safety scan for npm, PyPI, Docker, Go and Rust projects — known-malicious packages + CVEs + freshly-published deps + release-cooldown/digest pinning + build-manifest & AI-agent-config auto-exec checks. Zero dependencies, cross-platform, one command.",
+  "version": "0.3.0",
+  "description": "Morning supply-chain safety scan for npm, PyPI, Docker, Go, Rust and NuGet projects (monorepo-aware, recursive) — known-malicious packages + CVEs + freshly-published deps + release-cooldown/digest pinning + build-manifest & AI-agent-config auto-exec checks. Zero dependencies, cross-platform, one command.",
   "type": "module",
   "bin": {
     "supply-chain-scan": "bin/cli.js"
