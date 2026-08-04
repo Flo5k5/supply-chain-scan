@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { detect } from '../lib/detect.js';
 import { ageInDays } from '../lib/registry.js';
-import { pinning, buildManifestScan, undeclaredLargeJsRoots, agentConfigScan } from '../lib/checks.js';
+import { pinning, installTimeProtection, buildManifestScan, undeclaredLargeJsRoots, agentConfigScan } from '../lib/checks.js';
 
 function fixture(files) {
   const dir = mkdtempSync(join(tmpdir(), 'scs-test-'));
@@ -109,6 +109,13 @@ test('pinning: a comment mentioning the key does not count as configured', () =>
   });
   const r = pinning(dir, detect(dir));
   assert.equal(r.lines[0].status, 'warn'); // anchored regex ignores the comment
+  cleanup(dir);
+});
+
+test('installTimeProtection: skips when neither npm nor PyPI is detected', () => {
+  const dir = fixture({ 'go.sum': 'example.com/x v1.0.0 h1:abc' });
+  const r = installTimeProtection(detect(dir));
+  assert.equal(r.lines[0].status, 'skip');
   cleanup(dir);
 });
 

@@ -6,8 +6,8 @@
     {
       "name": "supply-chain-scan",
       "source": ".",
-      "description": "Monorepo-aware supply-chain scan for npm / PyPI / Docker / Go / Rust / NuGet — incl. build-manifest & AI-agent-config auto-exec checks (Shai-Hulud/Miasma vectors).",
-      "version": "0.3.0"
+      "description": "Monorepo-aware supply-chain scan for npm / PyPI / Docker / Go / Rust / NuGet — incl. install-time protection (Aikido Safe Chain) and build-manifest & AI-agent-config auto-exec checks (Shai-Hulud/Miasma vectors).",
+      "version": "0.4.0"
     }
   ]
 }

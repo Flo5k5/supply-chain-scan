@@ -28,6 +28,7 @@ adoption) and malicious/typosquatted Docker images all exploit the same blind sp
 | Known-malicious package (npm/PyPI/Go/Rust) | **osv-scanner** + the OSV `MAL-` feed |
 | Known CVE | osv-scanner + the package manager's `audit` |
 | **Zero-hour** malicious release (not yet reported) | **freshness heuristic** (flag deps published < N days ago) + the **release-cooldown** config check |
+| **Install-time execution** of a malicious `preinstall`/`postinstall` script (the keyv/Shai-Hulud vector, Aug 2026) | **install-time protection check**: flags whether [Aikido Safe Chain](https://github.com/AikidoSec/safe-chain) is active — it blocks the install in real time, before this scan (or any retrospective tool) ever sees the lockfile |
 | Mutable / hijackable Docker base image | **digest-pinning** check (`@sha256:`) + optional image CVE scan |
 | **Install-time code execution** outside `package.json` scripts (the *phantom gyp* trick — Shai-Hulud/Miasma, 2026) | **build-manifest scan**: flags shell-command substitution in `binding.gyp`/`Makefile`/`setup.py` |
 | **Obfuscated worm payload** dropped as a root JS file (e.g. `bun_environment.js`) | **undeclared-large-JS check**: oversized root `.js/.ts` that isn't a declared entry point |
@@ -120,6 +121,9 @@ dependency tree) — bound it with `--depth <N>` or fall back to `--no-recursive
   ✓ pnpm: no high/critical advisories
 ▶ pinning / cooldown
   ⚠ npm: no minimumReleaseAge — add to pnpm-workspace.yaml: `minimumReleaseAge: 4320` (3 days)
+▶ install-time protection — Aikido Safe Chain
+  ℹ not installed — this scan only judges a lockfile that already resolved; safe-chain blocks a malicious install in real time, before any preinstall/postinstall script runs
+  ℹ install once: curl -fsSL https://github.com/AikidoSec/safe-chain/releases/latest/download/install-safe-chain.sh | sh
 ▶ freshness — deps changed recently & published < 3d ago (zero-hour)
   ⚠ left-pad@9.9.9 [npm] — published 1d ago (fresh; vet before trusting)
 ▶ Docker — base image pinning
@@ -147,9 +151,14 @@ the snippet:
 ## How it fits a layered defense
 
 1. **Release cooldown** (above) — keeps brand-new, most-likely-malicious versions out long enough to be caught.
-2. **`supply-chain-scan`** (this tool) — the morning gate: known-malicious + CVE + fresh-dep + pinning.
-3. *(optional, free)* the [Socket.dev](https://socket.dev) GitHub App — **behavioral** detection of *novel*
-   malware. This tool catches *known* and *fresh*; Socket adds the *unknown-behavioral* layer.
+2. **`supply-chain-scan`** (this tool) — the morning gate: known-malicious + CVE + fresh-dep + pinning. Runs
+   *after* an install has already happened, against whatever the lockfile resolved to.
+3. *(optional, free)* [Aikido Safe Chain](https://github.com/AikidoSec/safe-chain) — the **real-time** layer.
+   Wraps `npm`/`yarn`/`pnpm`/`bun`/`pip`/`poetry` and blocks a malicious install *before* its
+   `preinstall`/`postinstall` script runs, closing the one gap a retrospective scan structurally cannot: the
+   install that never gets a chance to finish. This tool checks whether it's installed and tells you if not.
+4. *(optional, free)* the [Socket.dev](https://socket.dev) GitHub App — **behavioral** detection of *novel*
+   malware on every PR. This tool catches *known* and *fresh*; Socket adds the *unknown-behavioral* layer.
 
 ## Privacy
 

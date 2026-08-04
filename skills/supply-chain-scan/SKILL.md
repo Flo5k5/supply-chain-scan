@@ -1,6 +1,6 @@
 ---
 name: supply-chain-scan
-description: Run a morning supply-chain safety scan on the JS/TS, Python, Docker, Go, Rust or NuGet project the user is about to work on. Monorepo-aware (recursively finds lockfiles and Dockerfiles in nested packages). Checks the lockfiles for known-malicious packages (OSV MAL- feed) and CVEs, flags freshly-published dependencies (zero-hour heuristic), runs the package manager's CVE audit, checks the per-project release-cooldown / Docker base-image digest pinning, scans build manifests for install-time code execution (the phantom-gyp trick), flags oversized undeclared root JS payloads, and flags repo/agent configs that auto-execute when the folder is opened in an AI coding agent (the Miasma vector). Account-free, no per-project CI. Use at the start of a dev day, when opening or cloning a repo, or right after pulling/updating dependencies or a Dockerfile base image.
+description: Run a morning supply-chain safety scan on the JS/TS, Python, Docker, Go, Rust or NuGet project the user is about to work on. Monorepo-aware (recursively finds lockfiles and Dockerfiles in nested packages). Checks the lockfiles for known-malicious packages (OSV MAL- feed) and CVEs, flags freshly-published dependencies (zero-hour heuristic), runs the package manager's CVE audit, checks the per-project release-cooldown / Docker base-image digest pinning, flags whether real-time install-time protection (Aikido Safe Chain) is active, scans build manifests for install-time code execution (the phantom-gyp trick), flags oversized undeclared root JS payloads, and flags repo/agent configs that auto-execute when the folder is opened in an AI coding agent (the Miasma vector). Account-free, no per-project CI. Use at the start of a dev day, when opening or cloning a repo, or right after pulling/updating dependencies or a Dockerfile base image.
 allowed-tools: Bash
 ---
 
@@ -41,7 +41,9 @@ Read the exit code and the `▶` sections, then give a crisp verdict:
   freshly-published dependency, a missing release cooldown, an unpinned Docker base image, a build manifest that
   runs code at install time, an oversized undeclared root JS file, or an agent/IDE config that auto-executes on
   folder open — with the concrete next step for each. Don't bury the lede. The build-manifest, large-JS and
-  agent-config findings are the 2026 Shai-Hulud/Miasma vectors: treat an unexpected one as high priority.
+  agent-config findings are the 2026 Shai-Hulud/Miasma vectors: treat an unexpected one as high priority. The
+  install-time protection line (Safe Chain) is `ℹ`, not `⚠` — it never blocks the verdict, but mention it: it's
+  the one layer that acts *before* an install finishes, which none of the other checks can do.
 - **exit 2 (SETUP)** → tell the user exactly what to install.
 
 ## The per-project config (offer to add it)

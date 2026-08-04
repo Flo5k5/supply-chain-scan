@@ -5,7 +5,7 @@
 import { resolve, basename } from 'node:path';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { detect } from '../lib/detect.js';
-import { osvScan, audit, pinning, freshness, dockerfile, imageScan, buildManifestScan, undeclaredLargeJsRoots, agentConfigScan } from '../lib/checks.js';
+import { osvScan, audit, pinning, installTimeProtection, freshness, dockerfile, imageScan, buildManifestScan, undeclaredLargeJsRoots, agentConfigScan } from '../lib/checks.js';
 import { header, section, verdict, c } from '../lib/output.js';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -94,6 +94,7 @@ const results = [];
 results.push(osvScan(dir, d));
 results.push(audit(dir, d));
 results.push(pinning(dir, d));
+results.push(installTimeProtection(d));
 results.push(buildManifestScan(dir, d));
 results.push(undeclaredLargeJsRoots(dir, maxJsMb));
 results.push(await freshness(dir, d, freshDays));
