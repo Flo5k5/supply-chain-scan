@@ -6,7 +6,10 @@ import { resolve, basename } from 'node:path';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { detect } from '../lib/detect.js';
 import { osvScan, audit, pinning, installTimeProtection, freshness, dockerfile, imageScan, buildManifestScan, undeclaredLargeJsRoots, agentConfigScan } from '../lib/checks.js';
-import { header, section, verdict, c } from '../lib/output.js';
+import { deployedCheck, findStackFile } from '../lib/deployed.js';
+import { loadKev } from '../lib/kev.js';
+import { cacheDir, loadState, saveState, resetState } from '../lib/state.js';
+import { header, section, verdict, blindspots, c } from '../lib/output.js';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -26,6 +29,12 @@ OPTIONS
   --depth <N>        max directory depth for the recursive scan (default 5)
   --no-agent-configs skip the agent/IDE auto-exec-on-open check (on by default)
   --images           also pull & scan Docker base images for CVEs (slow, opt-in)
+  --stack <file>     scan a deployed-component inventory (default: auto-detect
+                     stack.yaml / stack.yml / stack.json in the project root)
+  --no-stack         skip the deployed-stack check even if an inventory exists
+  --no-kev           skip the CISA KEV (known-exploited) cross-check
+  --no-state         don't read/write the per-project delta state (report everything)
+  --reset-state      drop the per-project state before scanning, then re-baseline
   --json             machine-readable output
   --no-color         disable ANSI colors
   -h, --help         show this help
@@ -54,6 +63,10 @@ let recursive = true;
 let maxDepth = 5;
 let images = false;
 let json = false;
+let stackFile = undefined;   // undefined = auto-detect; null = disabled
+let kevOn = true;
+let stateOn = true;
+let resetStateFirst = false;
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--help' || a === '-h') { printHelp(); process.exit(0); }
@@ -70,7 +83,13 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--fresh-days') freshDays = parseInt(argv[++i], 10) || 3;
   else if (a.startsWith('--fresh-days=')) freshDays = parseInt(a.slice(13), 10) || 3;
   else if (a === '--max-js-mb') maxJsMb = parseFloat(argv[++i]) || 0.5;
-  else if (a.startsWith('--max-js-mb=')) maxJsMb = parseFloat(a.slice(12)) || 0.5;
+  else if (a.startsWith('--max-js-mb=')) maxJsMb = parseFloat(a.slice(12), 10) || 0.5;
+  else if (a === '--stack') stackFile = argv[++i];
+  else if (a.startsWith('--stack=')) stackFile = a.slice(8);
+  else if (a === '--no-stack') stackFile = null;
+  else if (a === '--no-kev') kevOn = false;
+  else if (a === '--no-state') stateOn = false;
+  else if (a === '--reset-state') resetStateFirst = true;
   else if (a.startsWith('-')) { process.stderr.write(`Unknown option: ${a}\n`); process.exit(2); }
   else if (!dir) dir = a;
 }
@@ -83,15 +102,37 @@ if (!existsSync(dir) || !statSync(dir).isDirectory()) {
 const name = basename(dir);
 const d = detect(dir, { recursive, maxDepth });
 
-if (d.empty) {
-  if (json) process.stdout.write(JSON.stringify({ project: name, dir, ecosystems: [], results: [], code: 0 }) + '\n');
-  else process.stdout.write(`No JS / Python / Docker / Go / Rust project, build manifest or agent config here — nothing to scan.\n`);
+// Deployed-stack inventory: explicit --stack wins, else auto-detected at root.
+const stack = stackFile === null ? null : stackFile || findStackFile(dir);
+if (stack && !existsSync(resolve(dir, stack))) {
+  process.stderr.write(`Stack inventory not found: ${stack}\n`);
+  process.exit(2);
+}
+
+if (d.empty && !stack) {
+  // Absence of scope is NOT a clean bill of health — say so instead of a
+  // green exit that reads as "checked and fine" (a Docker-compose deployment,
+  // system packages or a deployed stack are simply not this scan's inputs).
+  const msg = 'No lockfile, Dockerfile/compose, build manifest, agent config or stack inventory found — nothing was scanned. This is absence of scope, not a clean result: deployed services, system packages and images pinned outside this tree are NOT covered here.';
+  if (json) process.stdout.write(JSON.stringify({ project: name, dir, ecosystems: [], results: [], blindSpots: [msg], code: 0 }) + '\n');
+  else {
+    header(`Supply-chain scan — ${name}`, dir);
+    process.stdout.write(`  ${c.yellow('!')} ${msg}\n`);
+  }
   process.exit(0);
+}
+
+// --- CISA KEV cross-check (cached 24h; failure = blind spot, never silence) ---
+let kev = null;
+const blindSpots = [];
+if (kevOn) {
+  kev = await loadKev({ cacheDir: cacheDir() });
+  if (!kev.ok) blindSpots.push(`CISA KEV catalog unavailable (${kev.error}) — "no KEV match" does NOT mean not exploited`);
 }
 
 // --- run checks ---
 const results = [];
-results.push(osvScan(dir, d));
+results.push(osvScan(dir, d, kev));
 results.push(audit(dir, d));
 results.push(pinning(dir, d));
 results.push(installTimeProtection(d));
@@ -103,6 +144,15 @@ if (d.docker) {
   results.push(dockerfile(d));
   if (images) results.push(imageScan(d));
 }
+let pendingState = null;
+if (stack) {
+  if (resetStateFirst) resetState(dir);
+  const state = stateOn ? loadState(dir) : { v: 1, osv: {} };
+  const dep = await deployedCheck(dir, stack, { state, kev });
+  results.push(dep);
+  blindSpots.push(...(dep.blindSpots || []));
+  if (stateOn && dep.nextState) pendingState = dep.nextState; // persist only on success
+}
 
 // --- exit code ---
 const lines = results.flatMap((r) => r.lines);
@@ -110,23 +160,30 @@ const review = lines.some((l) => l.status === 'fail' || l.status === 'warn');
 const scannerMissing = results.some((r) => r.setup);
 const code = review ? 1 : scannerMissing ? 2 : 0;
 
+// Persist the delta state only when the run produced trustworthy data: never
+// on a setup failure (the advisory layer didn't run) — that would mark
+// everything as "seen" without having checked it.
+if (pendingState && !scannerMissing) saveState(dir, pendingState);
+
 // --- output ---
 const ecosystems = [
   d.npm && `npm(${d.npm.pm})`,
   d.python && `PyPI${d.python.usesUv ? '(uv)' : ''}`,
   d.docker && `Docker(${d.docker.baseImages.length} img)`,
   d.goRust && `Go/Rust(${d.goRust.locks.length})`,
+  stack && `stack(${stack})`,
   d.nestedLocks > 0 && `+${d.nestedLocks} nested lock(s)`,
   d.buildManifests.length && `build(${d.buildManifests.length})`,
   d.agentConfigs.length && `agent-cfg(${d.agentConfigs.length})`,
 ].filter(Boolean);
 
 if (json) {
-  process.stdout.write(JSON.stringify({ project: name, dir, ecosystems, results, code }, null, 2) + '\n');
+  process.stdout.write(JSON.stringify({ project: name, dir, ecosystems, results, blindSpots, kev: kevOn ? kev.ok : 'skipped', code }, null, 2) + '\n');
 } else {
   header(`Supply-chain scan — ${name}`, dir);
   process.stdout.write(`   ${c.dim('detected:')} ${ecosystems.join(' · ')}\n`);
   for (const r of results) section(r);
+  blindspots(blindSpots);
   verdict(code, name);
   if (scannerMissing) process.stdout.write(c.dim('\n  tip: install osv-scanner for the known-malicious + CVE layer.\n'));
 }

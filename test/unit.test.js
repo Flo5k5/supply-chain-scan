@@ -238,3 +238,87 @@ test('ageInDays: whole-day delta', () => {
   assert.equal(ageInDays(fiveDaysAgo), 5);
   assert.equal(ageInDays(new Date()), 0);
 });
+
+// --- deployed stack: inventory parsing (lib/deployed.js) ---
+import { parseStack, findStackFile } from '../lib/deployed.js';
+import { kevFromCatalog, isKnownExploited } from '../lib/kev.js';
+import { diffVulns, nextState } from '../lib/state.js';
+
+test('parseStack: yaml with comments and quoting', () => {
+  const r = parseStack(`
+# deployed pins this scan must judge
+components:
+  - name: litellm
+    version: "1.106.2"
+    ecosystem: PyPI
+  - name: follow-redirects   # npm pin
+    version: 1.16.1
+    ecosystem: npm
+`);
+  assert.ok(!r.error, r.error);
+  assert.deepEqual(r.components, [
+    { eco: 'PyPI', name: 'litellm', version: '1.106.2' },
+    { eco: 'npm', name: 'follow-redirects', version: '1.16.1' },
+  ]);
+});
+
+test('parseStack: json variant', () => {
+  const r = parseStack(JSON.stringify({ components: [{ name: 'x', version: '1.0.0', ecosystem: 'Go' }] }), true);
+  assert.ok(!r.error);
+  assert.equal(r.components[0].eco, 'Go');
+});
+
+test('parseStack: rejects unsupported ecosystem and missing fields', () => {
+  assert.match(parseStack('components:\n  - name: img\n    version: "1"\n    ecosystem: Docker\n').error, /not supported/);
+  assert.match(parseStack('components:\n  - name: x\n    version: "1"\n').error, /name, version and ecosystem/);
+  assert.match(parseStack('nope: true\n').error, /no "components:?"/);
+  assert.match(parseStack('{bad json', true).error, /not valid JSON/);
+});
+
+test('findStackFile: picks the first known name', () => {
+  const dir = fixture({ 'stack.yaml': 'components: []\n' });
+  assert.equal(findStackFile(dir), 'stack.yaml');
+  cleanup(dir);
+  const none = fixture({ 'README.md': 'x' });
+  assert.equal(findStackFile(none), null);
+  cleanup(none);
+});
+
+// --- KEV cross-check (lib/kev.js) ---
+test('kevFromCatalog: maps cveID set, null on malformed', () => {
+  const ids = kevFromCatalog({ vulnerabilities: [{ cveID: 'CVE-2026-1234' }, { cveID: 'CVE-2026-5678' }] });
+  assert.ok(ids.has('CVE-2026-1234'));
+  assert.equal(ids.size, 2);
+  assert.equal(kevFromCatalog({}), null);
+  assert.equal(kevFromCatalog(null), null);
+});
+
+test('isKnownExploited: matches by id or CVE alias', () => {
+  const kev = new Set(['CVE-2026-1234']);
+  assert.equal(isKnownExploited('GHSA-xxxx', ['CVE-2026-1234'], kev), true);
+  assert.equal(isKnownExploited('CVE-2026-1234', [], kev), true);
+  assert.equal(isKnownExploited('GHSA-yyyy', ['CVE-0000-0000'], kev), false);
+  assert.equal(isKnownExploited('GHSA-zzzz', ['CVE-0000-0000'], null), false);
+});
+
+// --- delta state (lib/state.js) ---
+test('diffVulns: first run baselines, later runs report only fresh ids', () => {
+  const state = { v: 1, osv: {} };
+  let d = diffVulns('PyPI:litellm@1.106.2', ['A', 'B'], state);
+  assert.equal(d.firstRun, true);
+  assert.deepEqual(d.fresh, ['A', 'B']); // baseline run still surfaces everything once
+
+  const s1 = nextState(state, [{ key: 'PyPI:litellm@1.106.2', known: ['A', 'B'] }]);
+  d = diffVulns('PyPI:litellm@1.106.2', ['A', 'B'], s1);
+  assert.equal(d.firstRun, false);
+  assert.deepEqual(d.fresh, []);
+
+  d = diffVulns('PyPI:litellm@1.106.2', ['A', 'B', 'C'], s1);
+  assert.deepEqual(d.fresh, ['C']);
+});
+
+test('nextState: replaces known ids per component', () => {
+  const state = { v: 1, osv: { 'npm:x@1': ['OLD'] } };
+  const next = nextState(state, [{ key: 'npm:x@1', known: ['NEW'] }]);
+  assert.deepEqual(next.osv['npm:x@1'], ['NEW']);
+});

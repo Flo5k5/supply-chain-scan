@@ -89,12 +89,51 @@ supply-chain-scan [project-dir]      # defaults to the current directory
   --depth <N>        max directory depth for the recursive scan (default 5)
   --no-agent-configs skip the agent/IDE auto-exec-on-open check (on by default)
   --images           also pull & scan Docker base images for CVEs (slow, opt-in)
+  --stack <file>     deployed-component inventory (auto-detects stack.yaml at the root)
+  --no-stack         skip the deployed-stack check even if an inventory exists
+  --no-kev           skip the CISA KEV (known-exploited) cross-check
+  --no-state         report every deployed-stack advisory every run (no delta)
+  --reset-state      drop the per-project delta state, then re-baseline
   --json             machine-readable output
   --no-color         disable ANSI colors
   -h, --help / -v, --version
 ```
 
 Exit codes (scriptable): **`0`** clean · **`1`** review (findings) · **`2`** setup (osv-scanner not installed).
+
+Every CVE the scan reports is cross-checked against the **CISA KEV catalog** (cached 24h): a match is
+shown as `KNOWN EXPLOITED` and outranks severity. A source that cannot be reached (KEV offline, OSV API
+down) is reported under **blind spots** — a clean verdict then means "clean among what could be
+checked", never silence. Likewise, a directory with nothing scannable in scope says so explicitly:
+absence of scope is not a clean bill of health.
+
+### Deployed stack (stack.yaml)
+
+Lockfiles describe what a repo builds — not the pinned versions that actually run in production. Drop a
+`stack.yaml` next to the deploy config and the daily scan asks OSV.dev for each pin, reporting **only
+advisories new since the last successful run** (first run = baseline; state lives per project in
+`~/.cache/supply-chain-scan/`):
+
+```yaml
+# stack.yaml — deployed pins this scan must judge
+components:
+  - name: litellm
+    version: "1.106.2"
+    ecosystem: PyPI      # npm | PyPI | Go | crates.io | NuGet
+  - name: follow-redirects
+    version: "1.16.1"
+    ecosystem: npm
+```
+
+```
+▶ deployed stack — stack.yaml vs OSV.dev
+  ℹ 2 pinned component(s): litellm@1.106.2, follow-redirects@1.16.1
+  ✓ litellm@1.106.2 [PyPI] — no known advisories
+  ✗ follow-redirects@1.15.0 [npm] — NEW GHSA-8r9p-f939-6h3c (aka CVE-2026-xxxx) [high], fixed in 1.16.1 — KNOWN EXPLOITED (CISA KEV)
+```
+
+(Docker images aren't OSV-queryable packages — keep them under the digest-pinning check, which the scan
+already runs over Dockerfiles and compose files.)
 
 ### Monorepos (recursive by default)
 
