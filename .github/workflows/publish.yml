@@ -33,7 +33,12 @@ jobs:
         run: |
           node bin/cli.js --version
           node bin/cli.js --help
-      - name: Publish
-        run: npm publish --provenance --access public
+      - name: Publish (skips if already on npm — idempotent for tag re-pushes)
+        run: |
+          if npm view "supply-chain-scan@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1; then
+            echo "::notice::${GITHUB_REF_NAME#v} already published — skipping npm publish"
+            exit 0
+          fi
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

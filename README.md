@@ -27,6 +27,8 @@ adoption) and malicious/typosquatted Docker images all exploit the same blind sp
 |--------|----------------------|
 | Known-malicious package (npm/PyPI/Go/Rust) | **osv-scanner** + the OSV `MAL-` feed |
 | Known CVE | osv-scanner + the package manager's `audit` |
+| A CVE that is **exploited in the wild right now** | **CISA KEV cross-check**: every finding matched against the Known Exploited Vulnerabilities catalog — a match is shown as `KNOWN EXPLOITED` and outranks severity |
+| **Malicious release of a component you deploy but never build** (the [LiteLLM incident, Oct 2026](https://docs.litellm.ai/blog/security-incident-oct-21-2026): a poisoned Docker/PyPI release no lockfile ever sees) | **deployed-stack watch** (`stack.yaml`): OSV.dev queried per exact pinned version, only advisories **new since the last successful run** reported |
 | **Zero-hour** malicious release (not yet reported) | **freshness heuristic** (flag deps published < N days ago) + the **release-cooldown** config check |
 | **Install-time execution** of a malicious `preinstall`/`postinstall` script (the keyv/Shai-Hulud vector, Aug 2026) | **install-time protection check**: flags whether [Aikido Safe Chain](https://github.com/AikidoSec/safe-chain) is active — it blocks the install in real time, before this scan (or any retrospective tool) ever sees the lockfile |
 | Mutable / hijackable Docker base image | **digest-pinning** check (`@sha256:`) + optional image CVE scan |

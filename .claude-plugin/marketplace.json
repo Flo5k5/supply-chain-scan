@@ -1,13 +1,15 @@
 {
   "name": "flo5k5-tools",
-  "owner": { "name": "Flo5k5" },
+  "owner": {
+    "name": "Flo5k5"
+  },
   "description": "Claude Code plugins by Flo5k5.",
   "plugins": [
     {
       "name": "supply-chain-scan",
       "source": ".",
-      "description": "Monorepo-aware supply-chain scan for npm / PyPI / Docker / Go / Rust / NuGet — incl. install-time protection (Aikido Safe Chain) and build-manifest & AI-agent-config auto-exec checks (Shai-Hulud/Miasma vectors).",
-      "version": "0.4.0"
+      "description": "Monorepo-aware supply-chain scan for npm / PyPI / Docker / Go / Rust / NuGet — CVEs cross-checked against CISA KEV, deployed-stack watch (stack.yaml, delta-reported), release-cooldown / digest pinning, install-time protection (Aikido Safe Chain) and build-manifest & AI-agent-config auto-exec checks (Shai-Hulud/Miasma vectors).",
+      "version": "0.5.0"
     }
   ]
 }
