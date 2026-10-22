@@ -1,0 +1,39 @@
+name: Publish to npm
+
+# Tag-driven publish: push a tag `vX.Y.Z` matching package.json and CI does
+# the rest — no local npm login, no expiring ~/.npmrc token. Requires the
+# NPM_TOKEN repository secret (npmjs.com → Access Tokens → Granular, publish
+# right scoped to this package, CI/CD usage).
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    name: test + publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm --provenance (OIDC attestation)
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Version guard — tag must match package.json
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag $GITHUB_REF_NAME != package.json $PKG" >&2; exit 1
+          fi
+      - name: Unit tests
+        run: node --test
+      - name: Smoke — CLI runs
+        run: |
+          node bin/cli.js --version
+          node bin/cli.js --help
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
